@@ -10,7 +10,7 @@ import streamlit as st
 from inventory_classification_demo import build_output_df, classify_inventory
 
 
-SHELF_LIFE_ORDER = ["半年以下", "半年以上", "效期缺失"]
+SHELF_LIFE_ORDER = ["短", "长", "效期缺失"]
 PROCUREMENT_ORDER = ["常规备货", "按单采购"]
 XYZ_ORDER = ["X", "Y", "Z"]
 
@@ -22,8 +22,8 @@ DISPLAY_COLUMN_NAMES = {
     "mean_sales": "平均销量",
     "sales_amount": "销售价值",
     "效期classification": "当前效期分类",
-    "经销商效期": "经销商给的效期",
-    "经销商效期分类": "经销商效期分类",
+    "效期": "效期",
+    "效期分类": "效期分类",
     "动态当前效期": "动态当前效期",
     "默认周转天数": "默认周转天数",
     "销售后效期": "销售处理后效期",
@@ -32,7 +32,6 @@ DISPLAY_COLUMN_NAMES = {
     "库存周转天数": "库存周转天数",
     "库存分析结果": "库存分析结果",
     "采购模式": "采购模式",
-    "映射状态": "映射状态",
     "reason": "原因",
 }
 
@@ -44,7 +43,7 @@ NUMERIC_COLUMN_FORMATS = {
     "采购单价": "%.2f",
     "库存余量": "%.2f",
     "库存周转天数": "%.1f",
-    "经销商效期": "%.0f",
+    "效期": "%.0f",
     "动态当前效期": "%.0f",
     "默认周转天数": "%.0f",
     "销售后效期": "%.0f",
@@ -58,7 +57,7 @@ EXCEL_NUMBER_FORMATS = {
     "采购单价": "0.00",
     "库存余量": "0.00",
     "库存周转天数": "0.0",
-    "经销商效期": "0",
+    "效期": "0",
     "动态当前效期": "0",
     "默认周转天数": "0",
     "销售后效期": "0",
@@ -69,7 +68,7 @@ CLASSIFICATION_COLUMNS = [
     "SKU",
     "ABCXYZ",
     "效期classification",
-    "经销商效期",
+    "效期",
     "动态当前效期",
     "销售后效期",
     "sales_amount_contribution_pct",
@@ -87,8 +86,8 @@ SHELF_LIFE_TABLE_COLUMNS = [
     "SKU",
     "ABCXYZ",
     "效期classification",
-    "经销商效期",
-    "经销商效期分类",
+    "效期",
+    "效期分类",
     "动态当前效期",
     "默认周转天数",
     "销售后效期",
@@ -106,7 +105,7 @@ INVENTORY_RISK_COLUMNS = [
     "SKU",
     "库存余量",
     "库存周转天数",
-    "经销商效期",
+    "效期",
     "动态当前效期",
     "销售后效期",
     "销售后效期分类",
@@ -186,7 +185,7 @@ def render_header() -> None:
         """
         <div class="hero">
             <h1>物料分类 Demo</h1>
-            <p>上传库存数据和产品映射表后，系统会计算 ABCXYZ、动态效期、库存余量、采购模式和库存风险。</p>
+            <p>上传库存数据后，系统会计算 ABCXYZ、动态效期、库存余量、采购模式和库存风险。</p>
             <span class="status-pill">仅通过上传文件读取数据</span>
         </div>
         """,
@@ -194,16 +193,14 @@ def render_header() -> None:
     )
 
 
-def render_upload_panel() -> tuple[object, object, date]:
+def render_upload_panel() -> tuple[object, date]:
     st.markdown('<div class="section-label">上传与分析日期</div>', unsafe_allow_html=True)
-    columns = st.columns([1.2, 1.2, 0.8], gap="large")
+    columns = st.columns([1.6, 0.8], gap="large")
     with columns[0]:
         inventory_file = st.file_uploader("上传库存/销量数据", type=["xlsx", "xls"], key="inventory_file")
     with columns[1]:
-        mapping_file = st.file_uploader("上传产品映射表（可选）", type=["xlsx", "xls"], key="mapping_file")
-    with columns[2]:
         analysis_date = st.date_input("分析日期", value=date.today())
-    return inventory_file, mapping_file, analysis_date
+    return inventory_file, analysis_date
 
 
 def render_empty_state() -> None:
@@ -211,7 +208,7 @@ def render_empty_state() -> None:
         """
         <div class="panel">
             <p class="panel-title">等待上传</p>
-            <p class="panel-copy">请先上传库存/销量数据。产品映射表可选，用于把经销商或供应商编码映射成统一物料名称。</p>
+            <p class="panel-copy">请先上传库存/销量数据。系统只会读取你在页面上传的这一张表。</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -280,7 +277,7 @@ def render_shelf_life_tables(df: pd.DataFrame) -> None:
         return
     st.markdown('<div class="section-label">按效期分组的物料</div>', unsafe_allow_html=True)
     st.markdown(
-        '<p class="group-caption">效期分类标准：半年以下 <180 天；半年以上 >=180 天。经销商给的效期、动态当前效期、销售处理后效期都会显示。</p>',
+        '<p class="group-caption">效期分类标准：短 <180 天；长 >=180 天。效期、动态当前效期、销售处理后效期都会显示。</p>',
         unsafe_allow_html=True,
     )
     tabs = st.tabs([f"{label} ({len(group_df)})" for label, group_df in groups])
@@ -351,22 +348,21 @@ def run_demo() -> None:
     inject_styles()
     render_header()
 
-    inventory_file, mapping_file, analysis_date = render_upload_panel()
+    inventory_file, analysis_date = render_upload_panel()
     if inventory_file is None:
         render_empty_state()
         return
 
     try:
         raw_df = pd.read_excel(inventory_file)
-        mapping_df = pd.read_excel(mapping_file) if mapping_file is not None else None
-        result_df = classify_inventory(raw_df, mapping_df=mapping_df, analysis_date=analysis_date)
+        result_df = classify_inventory(raw_df, analysis_date=analysis_date)
         output_df = build_output_df(result_df)
 
         metric_columns = st.columns(5)
         metric_columns[0].metric("物料数量", len(output_df))
         metric_columns[1].metric("常规备货", int((output_df["采购模式"] == "常规备货").sum()))
         metric_columns[2].metric("按单采购", int((output_df["采购模式"] == "按单采购").sum()))
-        metric_columns[3].metric("半年以下", int((output_df["效期classification"] == "半年以下").sum()))
+        metric_columns[3].metric("短", int((output_df["效期classification"] == "短").sum()))
         metric_columns[4].metric("滞销风险", int(output_df["库存分析结果"].astype(str).str.startswith("滞销风险").sum()))
 
         chart_columns = st.columns(2, gap="large")

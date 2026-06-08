@@ -21,7 +21,6 @@ SHORT_SHELF_TURNOVER_DAYS = 30
 OUTPUT_COLUMNS = [
     "SKU",
     "物料名称",
-    "映射状态",
     "期末库存",
     "采购在途",
     "销售未出库数量",
@@ -32,8 +31,8 @@ OUTPUT_COLUMNS = [
     "ABCXYZ",
     "ABC",
     "XYZ",
-    "经销商效期",
-    "经销商效期分类",
+    "效期",
+    "效期分类",
     "动态当前效期",
     "默认周转天数",
     "销售后效期",
@@ -52,27 +51,6 @@ OUTPUT_COLUMNS = [
     "reason",
     "采购单价",
 ]
-
-MAPPING_SOURCE_CANDIDATES = [
-    "SKU",
-    "物料编码",
-    "产品编码",
-    "产品代码",
-    "经销商编码",
-    "经销商产品编码",
-    "供应商编码",
-    "供应商产品编码",
-    "编码",
-]
-MAPPING_TARGET_CANDIDATES = [
-    "物料名称",
-    "标准物料名称",
-    "产品名称",
-    "标准产品名称",
-    "标准SKU",
-    "标准编码",
-]
-
 
 def clean_column_name(column: object) -> str:
     cleaned = str(column)
@@ -113,38 +91,11 @@ def require_columns(df: pd.DataFrame, required_columns: Iterable[str]) -> None:
         raise ValueError(f"Excel 缺少必要字段: {', '.join(missing_columns)}")
 
 
-def first_existing_column(df: pd.DataFrame, candidates: Iterable[str]) -> str | None:
-    return next((column for column in candidates if column in df.columns), None)
-
-
-def apply_product_mapping(df: pd.DataFrame, mapping_df: pd.DataFrame | None = None) -> pd.DataFrame:
+def ensure_material_name(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     if "物料名称" not in df.columns:
         df["物料名称"] = df["SKU"]
-    df["映射状态"] = "未使用映射表"
-
-    if mapping_df is None or mapping_df.empty:
-        return df
-
-    mapping = clean_column_names(mapping_df)
-    source_col = first_existing_column(mapping, MAPPING_SOURCE_CANDIDATES)
-    target_col = first_existing_column(mapping, MAPPING_TARGET_CANDIDATES)
-    if source_col is None or target_col is None:
-        df["映射状态"] = "映射表缺少编码或名称字段"
-        return df
-
-    mapping = mapping[[source_col, target_col]].copy()
-    mapping.columns = ["SKU", "映射物料名称"]
-    mapping["SKU"] = mapping["SKU"].astype(str).str.strip()
-    mapping = mapping.dropna(subset=["SKU"]).drop_duplicates("SKU", keep="first")
-
-    df["SKU"] = df["SKU"].astype(str).str.strip()
-    df = df.merge(mapping, on="SKU", how="left")
-    mapped_mask = df["映射物料名称"].notna() & (df["映射物料名称"].astype(str).str.strip() != "")
-    df.loc[mapped_mask, "物料名称"] = df.loc[mapped_mask, "映射物料名称"]
-    df["映射状态"] = np.where(mapped_mask, "已映射", "未匹配")
-    return df.drop(columns=["映射物料名称"])
-
+    return df
 
 def analysis_month_start(analysis_date: date) -> date:
     return date(analysis_date.year, analysis_date.month, 1)
@@ -155,7 +106,7 @@ def shelf_life_category(days: pd.Series) -> pd.Series:
     return pd.Series(
         np.select(
             [values < HALF_YEAR_DAYS, values >= HALF_YEAR_DAYS],
-            ["半年以下", "半年以上"],
+            ["短", "长"],
             default="效期缺失",
         ),
         index=days.index,
@@ -232,19 +183,19 @@ def classify_shelf_life(df: pd.DataFrame, analysis_date: date | None = None) -> 
         df["效期"] = np.nan
 
     days_since_received = max((analysis_date - analysis_month_start(analysis_date)).days, 0)
-    df["经销商效期"] = pd.to_numeric(df["效期"], errors="coerce")
-    df["经销商效期分类"] = shelf_life_category(df["经销商效期"])
-    df["动态当前效期"] = df["经销商效期"] - days_since_received
+    df["效期"] = pd.to_numeric(df["效期"], errors="coerce")
+    df["效期分类"] = shelf_life_category(df["效期"])
+    df["动态当前效期"] = df["效期"] - days_since_received
     df["动态当前效期"] = df["动态当前效期"].clip(lower=0)
     df["效期classification"] = shelf_life_category(df["动态当前效期"])
-    df["默认周转天数"] = np.where(df["效期classification"] == "半年以上", LONG_SHELF_TURNOVER_DAYS, SHORT_SHELF_TURNOVER_DAYS)
+    df["默认周转天数"] = np.where(df["效期classification"] == "长", LONG_SHELF_TURNOVER_DAYS, SHORT_SHELF_TURNOVER_DAYS)
     df.loc[df["效期classification"] == "效期缺失", "默认周转天数"] = np.nan
     df["销售后效期"] = df["动态当前效期"] - df["默认周转天数"]
     df["销售后效期分类"] = shelf_life_category(df["销售后效期"])
 
-    add_reason_where(df, df["经销商效期"].isna(), "效期缺失")
-    add_reason_where(df, df["效期classification"] == "半年以下", "半年以下效期")
-    add_reason_where(df, df["销售后效期分类"] == "半年以下", "销售后半年以下效期")
+    add_reason_where(df, df["效期"].isna(), "效期缺失")
+    add_reason_where(df, df["效期classification"] == "短", "短效期")
+    add_reason_where(df, df["销售后效期分类"] == "短", "销售后短效期")
     return df
 
 
@@ -265,9 +216,9 @@ def classify_inventory_risk(df: pd.DataFrame) -> pd.DataFrame:
     has_stock = df["库存余量"] > 0
     no_sales = df["mean_sales"] == 0
     long_turnover = df["库存周转天数"] > df["默认周转天数"]
-    short_after_sales = df["销售后效期分类"] == "半年以下"
+    short_after_sales = df["销售后效期分类"] == "短"
     expires_before_turnover = df["库存周转天数"] > df["销售后效期"]
-    healthy = (df["库存周转天数"] <= df["默认周转天数"]) & (df["销售后效期分类"] == "半年以上")
+    healthy = (df["库存周转天数"] <= df["默认周转天数"]) & (df["销售后效期分类"] == "长")
 
     df["库存分析结果"] = np.select(
         [~has_stock, has_stock & no_sales, has_stock & (short_after_sales & long_turnover), has_stock & expires_before_turnover, has_stock & healthy],
@@ -292,11 +243,10 @@ def sort_for_purchase_review(df: pd.DataFrame) -> pd.DataFrame:
 
 def classify_inventory(
     df: pd.DataFrame,
-    mapping_df: pd.DataFrame | None = None,
     analysis_date: date | None = None,
 ) -> pd.DataFrame:
     df = clean_column_names(df)
-    df = apply_product_mapping(df, mapping_df)
+    df = ensure_material_name(df)
     df = calculate_mean_sales_and_cv(df)
     df = calculate_inventory_balance(df)
     df = classify_abc(df)
