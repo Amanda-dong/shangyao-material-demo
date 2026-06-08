@@ -15,21 +15,23 @@ PROCUREMENT_ORDER = ["常规备货", "按单采购"]
 XYZ_ORDER = ["X", "Y", "Z"]
 
 DISPLAY_COLUMN_NAMES = {
+    "罗诊物料号": "罗诊物料号",
+    "物料": "物料",
     "SKU": "物料编码",
     "物料名称": "物料名称",
     "ABCXYZ": "物料分类",
     "sales_amount_contribution_pct": "销售价值贡献占比",
-    "mean_sales": "平均销量",
+    "mean_sales": "近五月平均销量",
     "sales_amount": "销售价值",
     "CV": "销量波动系数",
-    "效期classification": "动态当前效期分类",
+    "效期classification": "效期分类",
     "效期": "效期",
     "效期分类": "原始效期分类",
     "动态当前效期": "动态当前效期",
     "销售后效期": "销售处理后效期",
     "销售后效期分类": "销售后效期分类",
     "库存余量": "库存余量",
-    "库存分析结果": "库存分析结果",
+    "库存分析结果": "库存分析",
     "采购模式": "采购模式",
     "reason": "原因",
 }
@@ -58,65 +60,27 @@ EXCEL_NUMBER_FORMATS = {
     "销售后效期": "0",
 }
 
-CLASSIFICATION_COLUMNS = [
+TABLE_BASE_COLUMNS = [
+    "罗诊物料号",
+    "物料",
     "物料名称",
-    "SKU",
+    "库存余量",
     "ABCXYZ",
     "效期classification",
     "效期",
-    "动态当前效期",
     "销售后效期",
+    "sales_amount",
     "sales_amount_contribution_pct",
     "mean_sales",
     "CV",
-    "sales_amount",
-    "库存余量",
     "采购模式",
     "库存分析结果",
 ]
 
-SHELF_LIFE_TABLE_COLUMNS = [
-    "物料名称",
-    "SKU",
-    "ABCXYZ",
-    "效期classification",
-    "效期",
-    "效期分类",
-    "动态当前效期",
-    "销售后效期",
-    "销售后效期分类",
-    "库存余量",
-    "库存分析结果",
-    "采购模式",
-    "mean_sales",
-    "reason",
-]
-
-INVENTORY_RISK_COLUMNS = [
-    "物料名称",
-    "SKU",
-    "库存余量",
-    "效期",
-    "动态当前效期",
-    "销售后效期",
-    "销售后效期分类",
-    "mean_sales",
-    "库存分析结果",
-    "reason",
-]
-
-PROCUREMENT_COLUMNS = [
-    "物料名称",
-    "SKU",
-    "ABCXYZ",
-    "效期classification",
-    "销售后效期分类",
-    "库存余量",
-    "mean_sales",
-    "采购模式",
-    "库存分析结果",
-    "reason",
-]
+CLASSIFICATION_COLUMNS = TABLE_BASE_COLUMNS
+SHELF_LIFE_TABLE_COLUMNS = [*TABLE_BASE_COLUMNS, "销售后效期分类", "reason"]
+INVENTORY_RISK_COLUMNS = [*TABLE_BASE_COLUMNS, "销售后效期分类", "reason"]
+PROCUREMENT_COLUMNS = [*TABLE_BASE_COLUMNS, "销售后效期分类", "reason"]
 
 
 def inject_styles() -> None:
