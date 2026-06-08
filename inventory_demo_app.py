@@ -1,59 +1,133 @@
 from __future__ import annotations
 
+from datetime import date
 from io import BytesIO
 
 import altair as alt
 import pandas as pd
 import streamlit as st
+
 from inventory_classification_demo import build_output_df, classify_inventory
 
 
-SHELF_LIFE_ORDER = ["高危<90", "预警90-180", "健康181-365", "安全>365", "效期缺失"]
-SHELF_LIFE_DISPLAY_NAMES = {
-    "高危<90": "高危",
-    "预警90-180": "预警",
-    "健康181-365": "健康",
-    "安全>365": "安全",
-    "效期缺失": "缺失",
-}
+SHELF_LIFE_ORDER = ["半年以下", "半年以上", "效期缺失"]
+PROCUREMENT_ORDER = ["常规备货", "按单采购"]
 XYZ_ORDER = ["X", "Y", "Z"]
+
 DISPLAY_COLUMN_NAMES = {
-    "SKU": "物料名称",
+    "SKU": "物料编码",
+    "物料名称": "物料名称",
     "ABCXYZ": "物料分类",
-    "mean_sales": "平均销量",
     "sales_amount_contribution_pct": "销售价值贡献占比",
+    "mean_sales": "平均销量",
     "sales_amount": "销售价值",
-    "效期classification": "效期分类",
+    "效期classification": "当前效期分类",
+    "经销商效期": "经销商给的效期",
+    "经销商效期分类": "经销商效期分类",
+    "动态当前效期": "动态当前效期",
+    "默认周转天数": "默认周转天数",
+    "销售后效期": "销售处理后效期",
+    "销售后效期分类": "销售后效期分类",
+    "库存余量": "库存余量",
+    "库存周转天数": "库存周转天数",
+    "库存分析结果": "库存分析结果",
+    "采购模式": "采购模式",
+    "映射状态": "映射状态",
+    "reason": "原因",
 }
-SHELF_LIFE_TABLE_COLUMNS = [
-    "SKU",
-    "ABCXYZ",
-    "效期classification",
-    "ABC",
-    "XYZ",
-    "MTO/MTS",
-    "效期",
-    "sales_amount_contribution_pct",
-    "mean_sales",
-    "CV",
-    "sales_amount",
-    "reason",
-    "采购单价",
-]
+
 NUMERIC_COLUMN_FORMATS = {
     "sales_amount_contribution_pct": "%.2f%%",
     "mean_sales": "%.2f",
     "CV": "%.2f",
     "sales_amount": "%.2f",
     "采购单价": "%.2f",
+    "库存余量": "%.2f",
+    "库存周转天数": "%.1f",
+    "经销商效期": "%.0f",
+    "动态当前效期": "%.0f",
+    "默认周转天数": "%.0f",
+    "销售后效期": "%.0f",
 }
+
 EXCEL_NUMBER_FORMATS = {
     "sales_amount_contribution_pct": '0.00"%"',
     "mean_sales": "0.00",
     "CV": "0.00",
     "sales_amount": "0.00",
     "采购单价": "0.00",
+    "库存余量": "0.00",
+    "库存周转天数": "0.0",
+    "经销商效期": "0",
+    "动态当前效期": "0",
+    "默认周转天数": "0",
+    "销售后效期": "0",
 }
+
+CLASSIFICATION_COLUMNS = [
+    "物料名称",
+    "SKU",
+    "ABCXYZ",
+    "效期classification",
+    "经销商效期",
+    "动态当前效期",
+    "销售后效期",
+    "sales_amount_contribution_pct",
+    "mean_sales",
+    "CV",
+    "sales_amount",
+    "库存余量",
+    "库存周转天数",
+    "采购模式",
+    "库存分析结果",
+]
+
+SHELF_LIFE_TABLE_COLUMNS = [
+    "物料名称",
+    "SKU",
+    "ABCXYZ",
+    "效期classification",
+    "经销商效期",
+    "经销商效期分类",
+    "动态当前效期",
+    "默认周转天数",
+    "销售后效期",
+    "销售后效期分类",
+    "库存余量",
+    "库存周转天数",
+    "库存分析结果",
+    "采购模式",
+    "mean_sales",
+    "reason",
+]
+
+INVENTORY_RISK_COLUMNS = [
+    "物料名称",
+    "SKU",
+    "库存余量",
+    "库存周转天数",
+    "经销商效期",
+    "动态当前效期",
+    "销售后效期",
+    "销售后效期分类",
+    "mean_sales",
+    "库存分析结果",
+    "reason",
+]
+
+PROCUREMENT_COLUMNS = [
+    "物料名称",
+    "SKU",
+    "ABCXYZ",
+    "效期classification",
+    "销售后效期分类",
+    "库存余量",
+    "库存周转天数",
+    "mean_sales",
+    "采购模式",
+    "库存分析结果",
+    "reason",
+]
 
 
 def inject_styles() -> None:
@@ -66,188 +140,41 @@ def inject_styles() -> None:
             --line: #263244;
             --panel: #111827;
             --panel-2: #0b1220;
-            --soft: #151f2e;
             --accent: #33c3d6;
             --accent-soft: #0d3440;
-            --danger: #fb7185;
         }
-
         .stApp {
-            background:
-                radial-gradient(circle at 18% 0%, rgba(51, 195, 214, 0.14), transparent 34%),
-                linear-gradient(180deg, #05070b 0%, #0b1018 44%, #070a0f 100%);
+            background: radial-gradient(circle at 18% 0%, rgba(51, 195, 214, 0.14), transparent 34%),
+                        linear-gradient(180deg, #05070b 0%, #0b1018 44%, #070a0f 100%);
             color: var(--ink);
         }
-
-        [data-testid="stHeader"] {
-            background: transparent;
-        }
-
-        .block-container {
-            padding-top: 2rem;
-            padding-bottom: 3rem;
-            max-width: 1280px;
-        }
-
-        .hero {
-            border: 1px solid rgba(51, 195, 214, 0.24);
+        [data-testid="stHeader"] { background: transparent; }
+        .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1280px; }
+        .hero, .panel, .upload-row {
+            border: 1px solid var(--line);
             background: linear-gradient(135deg, rgba(17, 24, 39, 0.98) 0%, rgba(11, 18, 32, 0.98) 100%);
             border-radius: 8px;
-            padding: 26px 30px;
-            box-shadow: 0 18px 52px rgba(0, 0, 0, 0.34);
-            margin-bottom: 20px;
-        }
-
-        .hero h1 {
-            margin: 0 0 8px;
-            font-size: 34px;
-            line-height: 1.15;
-            letter-spacing: 0;
-            color: var(--ink);
-        }
-
-        .hero p {
-            margin: 0;
-            color: var(--muted);
-            font-size: 15px;
-        }
-
-        .panel {
-            border: 1px solid var(--line);
-            background: var(--panel);
-            border-radius: 8px;
-            padding: 18px;
             box-shadow: 0 14px 34px rgba(0, 0, 0, 0.26);
-            min-height: 132px;
         }
-
-        .upload-row {
-            border: 1px solid var(--line);
-            background: var(--panel);
-            border-radius: 8px;
-            padding: 16px 18px;
-            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.26);
-            margin-bottom: 18px;
-        }
-
-        .panel-title {
-            margin: 0 0 6px;
-            color: var(--ink);
-            font-size: 17px;
-            font-weight: 700;
-        }
-
-        .panel-copy {
-            margin: 0 0 14px;
-            color: var(--muted);
-            font-size: 13px;
-        }
-
-        .status-pill {
-            display: inline-block;
-            border: 1px solid rgba(51, 195, 214, 0.35);
-            background: var(--accent-soft);
-            color: var(--accent);
-            border-radius: 999px;
-            padding: 4px 10px;
-            font-size: 12px;
-            font-weight: 700;
-            margin-top: 6px;
-        }
-
-        [data-testid="stMetric"] {
-            background: linear-gradient(180deg, #111827 0%, #0c1320 100%);
-            border: 1px solid var(--line);
-            border-radius: 8px;
-            padding: 14px 16px;
-            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
-        }
-
-        [data-testid="stMetricLabel"] p {
-            color: var(--muted);
-            font-size: 12px;
-        }
-
-        [data-testid="stMetricValue"] {
-            color: var(--accent);
-            font-weight: 800;
-        }
-
-        [data-testid="stFileUploader"] {
-            background: var(--panel-2);
-            border: 1px dashed rgba(51, 195, 214, 0.42);
-            border-radius: 8px;
-            padding: 12px;
-        }
-
-        [data-testid="stFileUploader"] * {
-            color: var(--ink);
-        }
-
-        [data-testid="stAlert"] {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            color: var(--ink);
-        }
-
-        .stDownloadButton button,
-        .stButton button {
-            border-radius: 6px;
-            border: 1px solid var(--accent);
-            background: var(--accent);
-            color: #031017;
-            font-weight: 700;
-        }
-
-        .stDownloadButton button:hover,
-        .stButton button:hover {
-            border-color: #75e4ef;
-            background: #75e4ef;
-            color: #031017;
-        }
-
-        .section-label {
-            margin: 26px 0 10px;
-            font-size: 18px;
-            font-weight: 800;
-            color: var(--ink);
-        }
-
-        .file-caption {
-            color: var(--muted);
-            font-size: 13px;
-            margin-top: 8px;
-        }
-
-        .group-caption {
-            color: var(--muted);
-            font-size: 13px;
-            margin: 0 0 10px;
-        }
-
-        [data-testid="stDataFrame"] {
-            border: 1px solid var(--line);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 8px;
-        }
-
-        .stTabs [data-baseweb="tab"] {
-            background: #111827;
-            border: 1px solid var(--line);
-            border-radius: 6px;
-            color: var(--muted);
-            padding: 8px 14px;
-        }
-
-        .stTabs [aria-selected="true"] {
-            color: var(--accent);
-            border-color: rgba(51, 195, 214, 0.55);
-            background: var(--accent-soft);
-        }
+        .hero { padding: 26px 30px; margin-bottom: 20px; border-color: rgba(51, 195, 214, 0.24); }
+        .hero h1 { margin: 0 0 8px; font-size: 34px; line-height: 1.15; color: var(--ink); }
+        .hero p, .panel-copy, .group-caption, .file-caption { color: var(--muted); font-size: 13px; }
+        .upload-row { padding: 16px 18px; margin-bottom: 18px; }
+        .panel { padding: 18px; min-height: 132px; }
+        .panel-title { margin: 0 0 6px; color: var(--ink); font-size: 17px; font-weight: 700; }
+        .panel-copy { margin: 0 0 14px; }
+        .status-pill { display: inline-block; border: 1px solid rgba(51, 195, 214, 0.35); background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; margin-top: 6px; }
+        [data-testid="stMetric"] { background: linear-gradient(180deg, #111827 0%, #0c1320 100%); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+        [data-testid="stMetricValue"] { color: var(--accent); font-weight: 800; }
+        [data-testid="stFileUploader"] { background: var(--panel-2); border: 1px dashed rgba(51, 195, 214, 0.42); border-radius: 8px; padding: 12px; }
+        [data-testid="stFileUploader"] * { color: var(--ink); }
+        .stDownloadButton button, .stButton button { border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #031017; font-weight: 700; }
+        .section-label { margin: 26px 0 10px; font-size: 18px; font-weight: 800; color: var(--ink); }
+        .group-caption { margin: 0 0 10px; }
+        [data-testid="stDataFrame"] { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+        .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+        .stTabs [data-baseweb="tab"] { background: #111827; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); padding: 8px 14px; }
+        .stTabs [aria-selected="true"] { color: var(--accent); border-color: rgba(51, 195, 214, 0.55); background: var(--accent-soft); }
         </style>
         """,
         unsafe_allow_html=True,
@@ -259,7 +186,7 @@ def render_header() -> None:
         """
         <div class="hero">
             <h1>物料分类 Demo</h1>
-            <p>上传 Excel 后自动清洗字段、计算销量稳定性、价值贡献、效期分层，并输出采购查看顺序。</p>
+            <p>上传库存数据和产品映射表后，系统会计算 ABCXYZ、动态效期、库存余量、采购模式和库存风险。</p>
             <span class="status-pill">仅通过上传文件读取数据</span>
         </div>
         """,
@@ -267,20 +194,16 @@ def render_header() -> None:
     )
 
 
-def render_upload_panel() -> object:
-    upload_columns = st.columns([1.0, 2.6], gap="large")
-    with upload_columns[0]:
-        st.markdown(
-            """
-            <div class="upload-row">
-                <p class="panel-title">上传数据</p>
-                <p class="panel-copy">支持 .xlsx / .xls。文件上传后才会触发读取和分类。</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with upload_columns[1]:
-        return st.file_uploader("上传 Excel 文件", type=["xlsx", "xls"], label_visibility="collapsed")
+def render_upload_panel() -> tuple[object, object, date]:
+    st.markdown('<div class="section-label">上传与分析日期</div>', unsafe_allow_html=True)
+    columns = st.columns([1.2, 1.2, 0.8], gap="large")
+    with columns[0]:
+        inventory_file = st.file_uploader("上传库存/销量数据", type=["xlsx", "xls"], key="inventory_file")
+    with columns[1]:
+        mapping_file = st.file_uploader("上传产品映射表（可选）", type=["xlsx", "xls"], key="mapping_file")
+    with columns[2]:
+        analysis_date = st.date_input("分析日期", value=date.today())
+    return inventory_file, mapping_file, analysis_date
 
 
 def render_empty_state() -> None:
@@ -288,27 +211,21 @@ def render_empty_state() -> None:
         """
         <div class="panel">
             <p class="panel-title">等待上传</p>
-            <p class="panel-copy">上传后这里会显示物料数量、MTO/MTS、效期风险，以及分类分布图。</p>
+            <p class="panel-copy">请先上传库存/销量数据。产品映射表可选，用于把经销商或供应商编码映射成统一物料名称。</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
-def display_df(df: pd.DataFrame) -> pd.DataFrame:
-    display = df.copy()
-    if "效期classification" in display.columns:
-        display["效期classification"] = display["效期classification"].replace(SHELF_LIFE_DISPLAY_NAMES)
-    return display
-
-
-def render_distribution(title: str, series: pd.Series) -> None:
-    series = series.replace(SHELF_LIFE_DISPLAY_NAMES)
+def render_distribution(title: str, series: pd.Series, order: list[str] | None = None) -> None:
     counts = series.value_counts().rename_axis("分类").reset_index(name="数量")
+    if order:
+        counts["_rank"] = counts["分类"].map({label: index for index, label in enumerate(order)}).fillna(len(order))
+        counts = counts.sort_values("_rank").drop(columns=["_rank"])
     st.markdown(f'<div class="section-label">{title}</div>', unsafe_allow_html=True)
     summary = " / ".join(f"{row['分类']}: {int(row['数量'])}" for _, row in counts.iterrows())
     st.markdown(f'<p class="group-caption">{summary}</p>', unsafe_allow_html=True)
-
     chart = (
         alt.Chart(counts)
         .mark_bar(color="#33c3d6", cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
@@ -323,138 +240,75 @@ def render_distribution(title: str, series: pd.Series) -> None:
 
 
 def dataframe_column_config(df: pd.DataFrame) -> dict[str, object]:
-    config = {
-        column: st.column_config.NumberColumn(
-            DISPLAY_COLUMN_NAMES.get(column, column),
-            format=number_format,
-        )
-        for column, number_format in NUMERIC_COLUMN_FORMATS.items()
-        if column in df.columns
-    }
-    for column, label in DISPLAY_COLUMN_NAMES.items():
-        if column in df.columns and column not in config:
+    config = {}
+    for column in df.columns:
+        label = DISPLAY_COLUMN_NAMES.get(column, column)
+        if column in NUMERIC_COLUMN_FORMATS:
+            config[column] = st.column_config.NumberColumn(label, format=NUMERIC_COLUMN_FORMATS[column])
+        else:
             config[column] = st.column_config.TextColumn(label)
     return config
 
 
 def render_table(df: pd.DataFrame) -> None:
-    st.dataframe(
-        display_df(df),
-        use_container_width=True,
-        hide_index=True,
-        column_config=dataframe_column_config(df),
-    )
+    st.dataframe(df, use_container_width=True, hide_index=True, column_config=dataframe_column_config(df))
 
 
 def sort_xyz_table(df: pd.DataFrame) -> pd.DataFrame:
-    xyz_rank = {label: index for index, label in enumerate(XYZ_ORDER)}
     table_df = df.copy()
-    table_df["_xyz_rank"] = table_df["XYZ"].map(xyz_rank).fillna(len(xyz_rank))
-    table_df = table_df.sort_values(
-        ["_xyz_rank", "ABCXYZ", "sales_amount"],
-        ascending=[True, True, False],
-        kind="mergesort",
-    )
-    return table_df.drop(columns=["_xyz_rank"])
+    table_df["_xyz_rank"] = table_df["XYZ"].map({label: index for index, label in enumerate(XYZ_ORDER)}).fillna(len(XYZ_ORDER))
+    return table_df.sort_values(["_xyz_rank", "ABCXYZ", "sales_amount"], ascending=[True, True, False]).drop(columns=["_xyz_rank"])
 
 
 def shelf_life_groups(df: pd.DataFrame) -> list[tuple[str, pd.DataFrame]]:
-    ordered_labels = [label for label in SHELF_LIFE_ORDER if label in set(df["效期classification"])]
-    extra_labels = [
-        label
-        for label in sorted(df["效期classification"].dropna().unique())
-        if label not in SHELF_LIFE_ORDER
-    ]
-    return [
-        (label, sort_xyz_table(df[df["效期classification"] == label]))
-        for label in [*ordered_labels, *extra_labels]
-    ]
+    labels = [label for label in SHELF_LIFE_ORDER if label in set(df["效期classification"])]
+    return [(label, sort_xyz_table(df[df["效期classification"] == label])) for label in labels]
+
+
+def render_classification_table(df: pd.DataFrame) -> None:
+    st.markdown('<div class="section-label">分类结果</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="group-caption">稳定性：CV = 近 5 个月销量标准差 / 近 5 个月平均销量。价值：销售价值 = 平均销量 x 采购单价。效期按分析日期动态扣减本月 1 号至当天的天数。</p>',
+        unsafe_allow_html=True,
+    )
+    render_table(df[[column for column in CLASSIFICATION_COLUMNS if column in df.columns]])
 
 
 def render_shelf_life_tables(df: pd.DataFrame) -> None:
     groups = shelf_life_groups(df)
     if not groups:
         return
-
     st.markdown('<div class="section-label">按效期分组的物料</div>', unsafe_allow_html=True)
     st.markdown(
-        """
-        <p class="group-caption">效期分类标准：高危 <90 天；预警 90-180 天；健康 181-365 天；安全 >365 天。90 天以上视为有效期可用范围。</p>
-        """,
+        '<p class="group-caption">效期分类标准：半年以下 <180 天；半年以上 >=180 天。经销商给的效期、动态当前效期、销售处理后效期都会显示。</p>',
         unsafe_allow_html=True,
     )
-    tabs = st.tabs([f"{SHELF_LIFE_DISPLAY_NAMES.get(label, label)} ({len(group_df)})" for label, group_df in groups])
-    for tab, (label, group_df) in zip(tabs, groups):
+    tabs = st.tabs([f"{label} ({len(group_df)})" for label, group_df in groups])
+    for tab, (_, group_df) in zip(tabs, groups):
         with tab:
-            xyz_summary = group_df["XYZ"].value_counts().reindex(XYZ_ORDER, fill_value=0)
-            st.markdown(
-                (
-                    f'<p class="group-caption">{SHELF_LIFE_DISPLAY_NAMES.get(label, label)}: '
-                    f'X={int(xyz_summary["X"])} / Y={int(xyz_summary["Y"])} / '
-                    f'Z={int(xyz_summary["Z"])}</p>'
-                ),
-                unsafe_allow_html=True,
-            )
-            columns = [column for column in SHELF_LIFE_TABLE_COLUMNS if column in group_df.columns]
-            render_table(group_df[columns])
+            render_table(group_df[[column for column in SHELF_LIFE_TABLE_COLUMNS if column in group_df.columns]])
 
 
-def render_abcxyz_table(df: pd.DataFrame) -> None:
-    st.markdown('<div class="section-label">分类结果</div>', unsafe_allow_html=True)
+def render_inventory_risk_table(df: pd.DataFrame) -> None:
+    st.markdown('<div class="section-label">库存风险分析</div>', unsafe_allow_html=True)
     st.markdown(
-        (
-            '<p class="group-caption">稳定性：CV = 近 5 个月销量标准差 / 近 5 个月平均销量，CV 越低需求越稳定。'
-            '价值：销售价值 = 平均销量 x 采购单价，用于 ABC 累计贡献度排序。</p>'
-        ),
+        '<p class="group-caption">滞销风险会同时看库存余量、库存周转天数、销售处理后效期和销量。周转短且效期长通常不算滞销；周转长且效期短会被标记为滞销风险。</p>',
         unsafe_allow_html=True,
     )
-    columns = [
-        "SKU",
-        "ABCXYZ",
-        "效期classification",
-        "ABC",
-        "XYZ",
-        "sales_amount_contribution_pct",
-        "mean_sales",
-        "CV",
-        "sales_amount",
-        "采购单价",
-        "效期",
-    ]
-    render_table(df[columns])
+    render_table(df[[column for column in INVENTORY_RISK_COLUMNS if column in df.columns]])
 
 
-def render_mto_mts_table(df: pd.DataFrame) -> None:
-    st.markdown('<div class="section-label">MTO/MTS 判断</div>', unsafe_allow_html=True)
-    st.markdown(
-        (
-            '<p class="group-caption">在 ABCXYZ 和效期 XYZ 表之后，再看是否常规备货：'
-            'MTO = 按单采购，MTS = 常规备货。下面分开显示两张表。</p>'
-        ),
-        unsafe_allow_html=True,
-    )
+def render_procurement_tables(df: pd.DataFrame) -> None:
+    st.markdown('<div class="section-label">采购模式判断</div>', unsafe_allow_html=True)
+    st.markdown('<p class="group-caption">常规备货 = 可进入备货池；按单采购 = 常规不备货，有需求再看单处理。</p>', unsafe_allow_html=True)
     metric_columns = st.columns(2)
-    metric_columns[0].metric("MTS", int((df["MTO/MTS"] == "MTS").sum()))
-    metric_columns[1].metric("MTO", int((df["MTO/MTS"] == "MTO").sum()))
+    metric_columns[0].metric("常规备货", int((df["采购模式"] == "常规备货").sum()))
+    metric_columns[1].metric("按单采购", int((df["采购模式"] == "按单采购").sum()))
 
-    columns = [
-        "SKU",
-        "ABCXYZ",
-        "效期classification",
-        "sales_amount_contribution_pct",
-        "mean_sales",
-        "CV",
-        "MTO/MTS",
-        "reason",
-    ]
-    mts_df = df[df["MTO/MTS"] == "MTS"][columns]
-    mto_df = df[df["MTO/MTS"] == "MTO"][columns]
-
-    st.markdown('<div class="section-label">MTS 物料</div>', unsafe_allow_html=True)
-    render_table(mts_df)
-
-    st.markdown('<div class="section-label">MTO 物料</div>', unsafe_allow_html=True)
-    render_table(mto_df)
+    for mode in PROCUREMENT_ORDER:
+        st.markdown(f'<div class="section-label">{mode}物料</div>', unsafe_allow_html=True)
+        mode_df = df[df["采购模式"] == mode]
+        render_table(mode_df[[column for column in PROCUREMENT_COLUMNS if column in mode_df.columns]])
 
 
 def get_excel_column_letter(column_index: int) -> str:
@@ -476,15 +330,19 @@ def apply_excel_number_formats(writer: pd.ExcelWriter, df: pd.DataFrame, sheet_n
             cell.number_format = number_format
 
 
+def write_sheet(writer: pd.ExcelWriter, df: pd.DataFrame, sheet_name: str) -> None:
+    df.to_excel(writer, index=False, sheet_name=sheet_name[:31])
+    apply_excel_number_formats(writer, df, sheet_name[:31])
+
+
 def to_excel_bytes(df: pd.DataFrame) -> bytes:
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        display_df(df).to_excel(writer, index=False, sheet_name="总表")
-        apply_excel_number_formats(writer, df, "总表")
+        write_sheet(writer, df, "总表")
         for label, group_df in shelf_life_groups(df):
-            safe_label = label.replace("/", "-").replace("\\", "-")[:31]
-            display_df(group_df).to_excel(writer, index=False, sheet_name=safe_label)
-            apply_excel_number_formats(writer, group_df, safe_label)
+            write_sheet(writer, group_df, label)
+        risk_df = df[[column for column in INVENTORY_RISK_COLUMNS if column in df.columns]]
+        write_sheet(writer, risk_df, "库存风险分析")
     return output.getvalue()
 
 
@@ -493,41 +351,39 @@ def run_demo() -> None:
     inject_styles()
     render_header()
 
-    uploaded_file = render_upload_panel()
+    inventory_file, mapping_file, analysis_date = render_upload_panel()
+    if inventory_file is None:
+        render_empty_state()
+        return
 
     try:
-        if uploaded_file is not None:
-            raw_df = pd.read_excel(uploaded_file)
-            source_name = uploaded_file.name
-        else:
-            render_empty_state()
-            return
-
-        result_df = classify_inventory(raw_df)
+        raw_df = pd.read_excel(inventory_file)
+        mapping_df = pd.read_excel(mapping_file) if mapping_file is not None else None
+        result_df = classify_inventory(raw_df, mapping_df=mapping_df, analysis_date=analysis_date)
         output_df = build_output_df(result_df)
 
-        metric_columns = st.columns(4)
+        metric_columns = st.columns(5)
         metric_columns[0].metric("物料数量", len(output_df))
-        metric_columns[1].metric("MTS物料", int((output_df["MTO/MTS"] == "MTS").sum()))
-        metric_columns[2].metric("MTO物料", int((output_df["MTO/MTS"] == "MTO").sum()))
-        metric_columns[3].metric(
-            "高危效期物料",
-            int((output_df["效期classification"] == "高危<90").sum()),
-        )
+        metric_columns[1].metric("常规备货", int((output_df["采购模式"] == "常规备货").sum()))
+        metric_columns[2].metric("按单采购", int((output_df["采购模式"] == "按单采购").sum()))
+        metric_columns[3].metric("半年以下", int((output_df["效期classification"] == "半年以下").sum()))
+        metric_columns[4].metric("滞销风险", int(output_df["库存分析结果"].astype(str).str.startswith("滞销风险").sum()))
 
         chart_columns = st.columns(2, gap="large")
         with chart_columns[0]:
-            render_distribution("ABCXYZ 分布", output_df["ABCXYZ"])
+            render_distribution("效期分层", output_df["效期classification"], SHELF_LIFE_ORDER)
         with chart_columns[1]:
-            render_distribution("效期分层", output_df["效期classification"])
+            render_distribution("库存风险分布", output_df["库存分析结果"])
 
-        render_abcxyz_table(output_df)
+        render_classification_table(output_df)
         render_shelf_life_tables(output_df)
-        render_mto_mts_table(output_df)
+        render_inventory_risk_table(output_df)
+        render_procurement_tables(output_df)
+
         st.download_button(
-            "下载分类结果 Excel（含效期分组表）",
+            "下载分类结果 Excel（含效期与库存风险表）",
             data=to_excel_bytes(output_df),
-            file_name="库存分类结果.xlsx",
+            file_name="分类结果.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     except Exception as exc:
