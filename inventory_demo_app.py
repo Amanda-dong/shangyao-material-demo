@@ -13,6 +13,7 @@ from inventory_classification_demo import build_output_df, classify_inventory
 SHELF_LIFE_ORDER = ["短", "长", "效期缺失"]
 PROCUREMENT_ORDER = ["常规备货", "按单采购"]
 XYZ_ORDER = ["X", "Y", "Z"]
+ABCXYZ_ORDER = ["AX", "BX", "CX", "AY", "BY", "CY", "AZ", "BZ", "CZ"]
 
 DISPLAY_COLUMN_NAMES = {
     "罗诊物料号": "罗诊物料号",
@@ -320,7 +321,7 @@ def run_demo() -> None:
 
         chart_columns = st.columns(2, gap="large")
         with chart_columns[0]:
-            render_distribution("效期分层", output_df["效期classification"], SHELF_LIFE_ORDER)
+            render_distribution("物料分类分布", output_df["ABCXYZ"], ABCXYZ_ORDER)
         with chart_columns[1]:
             render_distribution("库存风险分布", output_df["库存分析结果"])
 
