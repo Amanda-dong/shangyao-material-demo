@@ -177,12 +177,10 @@ def classify_shelf_life(df: pd.DataFrame, analysis_date: date | None = None) -> 
     if "效期" not in df.columns:
         df["效期"] = np.nan
 
-    days_since_received = max((analysis_date - analysis_month_start(analysis_date)).days, 0)
     df["效期"] = pd.to_numeric(df["效期"], errors="coerce")
     df["效期分类"] = shelf_life_category(df["效期"])
-    df["动态当前效期"] = df["效期"] - days_since_received
-    df["动态当前效期"] = df["动态当前效期"].clip(lower=0)
-    df["效期classification"] = shelf_life_category(df["动态当前效期"])
+    df["动态当前效期"] = df["效期"]
+    df["效期classification"] = shelf_life_category(df["效期"])
     df["默认周转天数"] = np.where(df["效期classification"] == "长", LONG_SHELF_TURNOVER_DAYS, SHORT_SHELF_TURNOVER_DAYS)
     df.loc[df["效期classification"] == "效期缺失", "默认周转天数"] = np.nan
     df["销售后效期"] = df["动态当前效期"] - df["默认周转天数"]
