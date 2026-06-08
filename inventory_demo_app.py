@@ -29,7 +29,6 @@ DISPLAY_COLUMN_NAMES = {
     "销售后效期": "销售处理后效期",
     "销售后效期分类": "销售后效期分类",
     "库存余量": "库存余量",
-    "库存周转天数": "库存周转天数",
     "库存分析结果": "库存分析结果",
     "采购模式": "采购模式",
     "reason": "原因",
@@ -42,7 +41,6 @@ NUMERIC_COLUMN_FORMATS = {
     "sales_amount": "%.2f",
     "采购单价": "%.2f",
     "库存余量": "%.2f",
-    "库存周转天数": "%.1f",
     "效期": "%.0f",
     "动态当前效期": "%.0f",
     "销售后效期": "%.0f",
@@ -55,7 +53,6 @@ EXCEL_NUMBER_FORMATS = {
     "sales_amount": "0.00",
     "采购单价": "0.00",
     "库存余量": "0.00",
-    "库存周转天数": "0.0",
     "效期": "0",
     "动态当前效期": "0",
     "销售后效期": "0",
@@ -74,7 +71,6 @@ CLASSIFICATION_COLUMNS = [
     "CV",
     "sales_amount",
     "库存余量",
-    "库存周转天数",
     "采购模式",
     "库存分析结果",
 ]
@@ -90,7 +86,6 @@ SHELF_LIFE_TABLE_COLUMNS = [
     "销售后效期",
     "销售后效期分类",
     "库存余量",
-    "库存周转天数",
     "库存分析结果",
     "采购模式",
     "mean_sales",
@@ -101,7 +96,6 @@ INVENTORY_RISK_COLUMNS = [
     "物料名称",
     "SKU",
     "库存余量",
-    "库存周转天数",
     "效期",
     "动态当前效期",
     "销售后效期",
@@ -118,7 +112,6 @@ PROCUREMENT_COLUMNS = [
     "效期classification",
     "销售后效期分类",
     "库存余量",
-    "库存周转天数",
     "mean_sales",
     "采购模式",
     "库存分析结果",
@@ -286,7 +279,7 @@ def render_shelf_life_tables(df: pd.DataFrame) -> None:
 def render_inventory_risk_table(df: pd.DataFrame) -> None:
     st.markdown('<div class="section-label">库存风险分析</div>', unsafe_allow_html=True)
     st.markdown(
-        '<p class="group-caption">滞销风险会同时看库存余量、库存周转天数、销售处理后效期和销量。周转短且效期长通常不算滞销；周转长且效期短会被标记为滞销风险。</p>',
+        '<p class="group-caption">滞销风险会同时看库存余量、销售处理后效期和销量。销售处理后仍为长效期且有销量时通常不算滞销；销售处理后为短效期、低销量或无销量库存会被标记为风险。</p>',
         unsafe_allow_html=True,
     )
     render_table(df[[column for column in INVENTORY_RISK_COLUMNS if column in df.columns]])

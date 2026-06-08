@@ -26,7 +26,6 @@ OUTPUT_COLUMNS = [
     "销售未出库数量",
     "预定订单数量",
     "库存余量",
-    "库存周转天数",
     "库存分析结果",
     "ABCXYZ",
     "ABC",
@@ -135,9 +134,6 @@ def calculate_inventory_balance(df: pd.DataFrame) -> pd.DataFrame:
         df[column] = pd.to_numeric(df[column], errors="coerce").fillna(0)
 
     df["库存余量"] = df["期末库存"] + df["采购在途"] - df["销售未出库数量"] - df["预定订单数量"]
-    daily_sales = df["mean_sales"] / 30
-    df["库存周转天数"] = np.where(daily_sales > 0, df["库存余量"] / daily_sales, np.nan)
-    df.loc[df["库存余量"] <= 0, "库存周转天数"] = 0
     return df
 
 
@@ -214,14 +210,25 @@ def classify_inventory_risk(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     has_stock = df["库存余量"] > 0
     no_sales = df["mean_sales"] == 0
-    long_turnover = df["库存周转天数"] > df["默认周转天数"]
+    low_sales = (df["mean_sales"] > 0) & (df["mean_sales"] < 1)
     short_after_sales = df["销售后效期分类"] == "短"
-    expires_before_turnover = df["库存周转天数"] > df["销售后效期"]
-    healthy = (df["库存周转天数"] <= df["默认周转天数"]) & (df["销售后效期分类"] == "长")
+    long_after_sales = df["销售后效期分类"] == "长"
 
     df["库存分析结果"] = np.select(
-        [~has_stock, has_stock & no_sales, has_stock & (short_after_sales & long_turnover), has_stock & expires_before_turnover, has_stock & healthy],
-        ["无可售库存", "滞销风险-无销量库存", "滞销风险-周转长效期短", "滞销风险-周转超过效期", "库存健康"],
+        [
+            ~has_stock,
+            has_stock & no_sales,
+            has_stock & low_sales,
+            has_stock & short_after_sales,
+            has_stock & long_after_sales,
+        ],
+        [
+            "无可售库存",
+            "滞销风险-无销量库存",
+            "滞销风险-低销量库存",
+            "滞销风险-销售后短效期",
+            "库存健康",
+        ],
         default="需要关注",
     )
     add_reason_where(df, df["库存分析结果"].astype(str).str.startswith("滞销风险"), "滞销风险")
