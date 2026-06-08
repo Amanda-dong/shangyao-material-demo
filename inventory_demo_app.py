@@ -23,6 +23,8 @@ DISPLAY_COLUMN_NAMES = {
     "sales_amount": "销售价值",
     "CV": "销量波动系数",
     "效期classification": "动态当前效期分类",
+    "效期": "效期",
+    "效期分类": "原始效期分类",
     "动态当前效期": "动态当前效期",
     "销售后效期": "销售处理后效期",
     "销售后效期分类": "销售后效期分类",
@@ -39,6 +41,7 @@ NUMERIC_COLUMN_FORMATS = {
     "sales_amount": "%.2f",
     "采购单价": "%.2f",
     "库存余量": "%.2f",
+    "效期": "%.0f",
     "动态当前效期": "%.0f",
     "销售后效期": "%.0f",
 }
@@ -50,6 +53,7 @@ EXCEL_NUMBER_FORMATS = {
     "sales_amount": "0.00",
     "采购单价": "0.00",
     "库存余量": "0.00",
+    "效期": "0",
     "动态当前效期": "0",
     "销售后效期": "0",
 }
@@ -59,6 +63,7 @@ CLASSIFICATION_COLUMNS = [
     "SKU",
     "ABCXYZ",
     "效期classification",
+    "效期",
     "动态当前效期",
     "销售后效期",
     "sales_amount_contribution_pct",
@@ -75,6 +80,8 @@ SHELF_LIFE_TABLE_COLUMNS = [
     "SKU",
     "ABCXYZ",
     "效期classification",
+    "效期",
+    "效期分类",
     "动态当前效期",
     "销售后效期",
     "销售后效期分类",
@@ -89,6 +96,7 @@ INVENTORY_RISK_COLUMNS = [
     "物料名称",
     "SKU",
     "库存余量",
+    "效期",
     "动态当前效期",
     "销售后效期",
     "销售后效期分类",
@@ -259,7 +267,7 @@ def render_shelf_life_tables(df: pd.DataFrame) -> None:
         return
     st.markdown('<div class="section-label">按效期分组的物料</div>', unsafe_allow_html=True)
     st.markdown(
-        '<p class="group-caption">效期分类标准：短 <180 天；长 >=180 天。动态当前效期和销售处理后效期都会显示。</p>',
+        '<p class="group-caption">效期分类标准：短 <180 天；长 >=180 天。效期、动态当前效期、销售处理后效期都会显示。</p>',
         unsafe_allow_html=True,
     )
     tabs = st.tabs([f"{label} ({len(group_df)})" for label, group_df in groups])
