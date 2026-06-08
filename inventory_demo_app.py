@@ -369,8 +369,8 @@ def run_demo() -> None:
 
         render_classification_table(output_df)
         render_shelf_life_tables(output_df)
-        render_inventory_risk_table(output_df)
         render_procurement_tables(output_df)
+        render_inventory_risk_table(output_df)
 
         st.download_button(
             "下载分类结果 Excel（含效期与库存风险表）",
