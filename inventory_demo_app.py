@@ -21,6 +21,7 @@ DISPLAY_COLUMN_NAMES = {
     "sales_amount_contribution_pct": "销售价值贡献占比",
     "mean_sales": "平均销量",
     "sales_amount": "销售价值",
+    "CV": "销量波动系数",
     "效期classification": "当前效期分类",
     "效期": "效期",
     "效期分类": "效期分类",
@@ -261,7 +262,7 @@ def shelf_life_groups(df: pd.DataFrame) -> list[tuple[str, pd.DataFrame]]:
 def render_classification_table(df: pd.DataFrame) -> None:
     st.markdown('<div class="section-label">分类结果</div>', unsafe_allow_html=True)
     st.markdown(
-        '<p class="group-caption">稳定性：CV = 近 5 个月销量标准差 / 近 5 个月平均销量。价值：销售价值 = 平均销量 x 采购单价。效期按分析日期动态扣减本月 1 号至当天的天数。</p>',
+        '<p class="group-caption">稳定性：销量波动系数 = 近 5 个月销量标准差 / 近 5 个月平均销量。价值：销售价值 = 平均销量 x 采购单价。效期按分析日期动态扣减本月 1 号至当天的天数。</p>',
         unsafe_allow_html=True,
     )
     render_table(df[[column for column in CLASSIFICATION_COLUMNS if column in df.columns]])
@@ -354,12 +355,11 @@ def run_demo() -> None:
         result_df = classify_inventory(raw_df, analysis_date=analysis_date)
         output_df = build_output_df(result_df)
 
-        metric_columns = st.columns(5)
+        metric_columns = st.columns(4)
         metric_columns[0].metric("物料数量", len(output_df))
         metric_columns[1].metric("常规备货", int((output_df["采购模式"] == "常规备货").sum()))
         metric_columns[2].metric("按单采购", int((output_df["采购模式"] == "按单采购").sum()))
-        metric_columns[3].metric("短", int((output_df["效期classification"] == "短").sum()))
-        metric_columns[4].metric("滞销风险", int(output_df["库存分析结果"].astype(str).str.startswith("滞销风险").sum()))
+        metric_columns[3].metric("滞销风险", int(output_df["库存分析结果"].astype(str).str.startswith("滞销风险").sum()))
 
         chart_columns = st.columns(2, gap="large")
         with chart_columns[0]:
