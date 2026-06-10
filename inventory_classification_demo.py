@@ -17,6 +17,13 @@ ABCXYZ_SORT_ORDER = ["AX", "BX", "CX", "AY", "BY", "CY", "AZ", "BZ", "CZ"]
 HALF_YEAR_DAYS = 180
 LONG_SHELF_TURNOVER_DAYS = 45
 SHORT_SHELF_TURNOVER_DAYS = 30
+LOW_STOCK_COVER_MONTHS = 0.6
+HIGH_STOCK_COVER_MONTHS = 2.5
+VOLATILITY_WARNING_CV = 0.7
+INVENTORY_RISK_LOW_SALES = 1
+INVENTORY_RISK_LONG_COVER_MONTHS = 3
+SALES_DECLINE_RECENT_RATIO = 0.7
+SALES_DECLINE_FULL_RATIO = 0.5
 
 OUTPUT_COLUMNS = [
     "罗诊物料号",
@@ -30,9 +37,13 @@ OUTPUT_COLUMNS = [
     "sales_amount",
     "sales_amount_contribution_pct",
     "mean_sales",
+    "库存覆盖月数",
     "CV",
     "采购模式",
+    "采购模式判断依据",
     "库存分析结果",
+    "库存分析判断依据",
+    "销量持续下滑",
     "销售后效期分类",
     "SKU",
     "期末库存",
@@ -195,42 +206,106 @@ def classify_shelf_life(df: pd.DataFrame, analysis_date: date | None = None) -> 
 
 def classify_procurement_mode(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    mto_mask = (df["mean_sales"] == 0) | (df["mean_sales"] < 1) | (df["CV"] > 2)
-    df["采购模式"] = np.where(mto_mask, "按单采购", "常规备货")
-    df["MTO/MTS"] = df["采购模式"]
+    df["库存覆盖月数"] = df["库存余量"] / df["mean_sales"].replace(0, np.nan)
 
-    add_reason_where(df, df["mean_sales"] == 0, "无销量")
-    add_reason_where(df, (df["mean_sales"] > 0) & (df["mean_sales"] < 1), "低需求")
-    add_reason_where(df, df["CV"] > 2, "高波动")
+    short_shelf_life = df["销售后效期分类"] == "短"
+    no_sales = df["mean_sales"] <= 0
+    enough_stock_cover = df["库存覆盖月数"] > HIGH_STOCK_COVER_MONTHS
+    low_stock_cover = df["库存覆盖月数"] < LOW_STOCK_COVER_MONTHS
+    within_stock_cover = df["库存覆盖月数"].le(HIGH_STOCK_COVER_MONTHS)
+    high_volatility = df["CV"] >= VOLATILITY_WARNING_CV
+    stable_enough = df["CV"].lt(VOLATILITY_WARNING_CV).fillna(False)
+    regular_candidate = (~short_shelf_life) & (~no_sales) & within_stock_cover & stable_enough
+
+    procurement_conditions = [
+        short_shelf_life,
+        no_sales,
+        enough_stock_cover,
+        high_volatility,
+        regular_candidate,
+    ]
+    df["采购模式"] = np.select(
+        procurement_conditions,
+        ["按单采购", "按单采购", "按单采购", "按单采购", "常规备货"],
+        default="按单采购",
+    )
+
+    procurement_basis = np.select(
+        procurement_conditions,
+        [
+            "销售处理后短效期",
+            "无销量",
+            "库存覆盖超过2.5个月",
+            "销量波动系数达到0.7，暂不常规备货",
+            "库存覆盖不超过2.5个月且销量较稳定",
+        ],
+        default="数据不足",
+    )
+    df["采购模式判断依据"] = pd.Series(procurement_basis, index=df.index, dtype="object")
+    df.loc[regular_candidate & low_stock_cover, "采购模式判断依据"] = "库存覆盖低于0.6个月且销量较稳定，备货信号强"
+    df.loc[regular_candidate & (~low_stock_cover), "采购模式判断依据"] = "库存覆盖不超过2.5个月且销量较稳定"
+    df["MTO/MTS"] = df["采购模式"]
     return df
 
 
 def classify_inventory_risk(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     has_stock = df["库存余量"] > 0
-    no_sales = df["mean_sales"] == 0
-    low_sales = (df["mean_sales"] > 0) & (df["mean_sales"] < 1)
+    no_sales = df["mean_sales"] <= 0
+    low_sales = (df["mean_sales"] > 0) & (df["mean_sales"] < INVENTORY_RISK_LOW_SALES)
     short_after_sales = df["销售后效期分类"] == "短"
     long_after_sales = df["销售后效期分类"] == "长"
+    long_cover = df["库存覆盖月数"] > INVENTORY_RISK_LONG_COVER_MONTHS
 
+    first_month = df[MONTH_COLUMNS[0]]
+    third_month = df[MONTH_COLUMNS[2]]
+    fourth_month = df[MONTH_COLUMNS[3]]
+    last_month = df[MONTH_COLUMNS[4]]
+    full_period_decline = (first_month > 0) & (last_month <= first_month * SALES_DECLINE_FULL_RATIO)
+    recent_three_month_decline = (
+        (third_month > fourth_month)
+        & (fourth_month > last_month)
+        & (third_month > 0)
+        & (last_month <= third_month * SALES_DECLINE_RECENT_RATIO)
+    )
+    sales_declining = full_period_decline | recent_three_month_decline
+
+    risk_conditions = [
+        ~has_stock,
+        has_stock & no_sales,
+        has_stock & long_cover & sales_declining,
+        has_stock & long_cover,
+        has_stock & low_sales,
+        has_stock & short_after_sales,
+        has_stock & long_after_sales,
+    ]
     df["库存分析结果"] = np.select(
-        [
-            ~has_stock,
-            has_stock & no_sales,
-            has_stock & low_sales,
-            has_stock & short_after_sales,
-            has_stock & long_after_sales,
-        ],
+        risk_conditions,
         [
             "无可售库存",
             "滞销风险-无销量库存",
-            "滞销风险-低销量库存",
-            "滞销风险-销售后短效期",
+            "滞销风险-覆盖偏长且销量下滑",
+            "滞销风险-库存覆盖偏长",
+            "滞销风险-极低销量库存",
+            "需要关注-销售后短效期",
             "库存健康",
         ],
         default="需要关注",
     )
-    add_reason_where(df, df["库存分析结果"].astype(str).str.startswith("滞销风险"), "滞销风险")
+    df["库存分析判断依据"] = np.select(
+        risk_conditions,
+        [
+            "库存余量小于等于0",
+            "有库存但近五月无销量",
+            "库存覆盖月数超过3个月，且销量持续下滑",
+            "库存覆盖月数超过3个月",
+            "有库存但近五月平均销量低于1",
+            "库存覆盖未超过3个月，但销售处理后效期为短",
+            "库存覆盖未超过3个月，且销售处理后效期为长",
+        ],
+        default="未命中明确库存风险规则",
+    )
+    df["销量持续下滑"] = sales_declining
     return df
 
 
